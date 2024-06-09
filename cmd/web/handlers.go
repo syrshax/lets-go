@@ -3,7 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"html/template"
+
 	"github.com/syrshax/internal/models"
+
 	//"html/template"
 	"net/http"
 	"strconv"
@@ -61,8 +64,23 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
-	fmt.Fprintf(w, "%+v", snippet)
+	// Inicializamos slice de variables donde tenemos nuestros tmpl...
+	files := []string{
+		"./ui/html/base.tmpl",
+		"./ui/html/partials/nav.tmpl",
+		"./ui/html/pages/view.tmpl",
+	}
+	//Parseamos los templates>>
+	ts, err := template.ParseFiles(files...)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	//Los tenemos parseados y guardados en ts, ahora los renderizamos!
+	err = ts.ExecuteTemplate(w, "base", snippet)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
 }
 
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
