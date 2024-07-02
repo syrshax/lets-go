@@ -7,6 +7,8 @@ import (
 	"github.com/syrshax/internal/models"
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 )
 
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
@@ -14,8 +16,6 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Server", "Go")
-
 	snippets, err := app.snippets.Latest()
 	if err != nil {
 		app.serverError(w, r, err)
@@ -51,24 +51,54 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Display a form for creating a new snippet..."))
+	data := app.newTemplateData(r)
+	app.render(w, r, http.StatusOK, "create.tmpl", data)
 }
 
 func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request) {
-	// Create some variables holding dummy data. We'll remove these later on
-	// during the build.
-	title := "O snail"
-	content := "O snail\nClimb Mount Fuji,\nBut slowly, slowly!\n\n– Kobayashi Issa"
-	expires := 7
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 
-	// Pass the data to the SnippetModel.Insert() method, receiving the
-	// ID of the new record back.
+	err := r.ParseForm()
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+
+	title := r.PostForm.Get("title")
+	content := r.PostForm.Get("content")
+
+	expires, err := strconv.Atoi(r.PostForm.Get("expires"))
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+
+	fieldsErrors := make(map[string]string)
+
+	if strings.TrimSpace(title) == "" {
+		fieldsErrors["title"] = "This field cannot be blank"
+	} else if utf8.RuneCountInString(title) > 100 {
+		fieldsErrors["title"] = "This field cannot be more than 100 character long"
+	}
+
+	if strings.TrimSpace(content) == "" {
+		fieldsErrors["content"] = "This field cannot be blank"
+	}
+
+	if expires != 1 && expires != 7 && expires != 365 {
+		fieldsErrors["expires"] = "Tjos field must be equal to 1, 7 or 365"
+	}
+
+	if len(fieldsErrors) > 0 {
+		fmt.Fprint(w, fieldsErrors)
+		return
+	}
+
 	id, err := app.snippets.Insert(title, content, expires)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
 
-	// Redirect the user to the relevant page for the snippet.
 	http.Redirect(w, r, fmt.Sprintf("/snippet/view/%d\n", id), http.StatusSeeOther)
 }
